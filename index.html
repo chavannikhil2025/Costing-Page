@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signage Costing Sheet Generator</title>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @media print {
+            .print\\:hidden { display: none !important; }
+            .print\\:shadow-none { box-shadow: none !important; }
+            body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef } = React;
+
+        const PRODUCT_CATALOG = [
+            { code: 'FG1001', name: 'Backlit Signs' },
+            { code: 'FG1002', name: 'Nonlit Signs' },
+            { code: 'FG1003', name: 'ACP/ACM Signs' },
+            { code: 'FG1004', name: '3D Letters Sign' },
+            { code: 'FG1005', name: 'Lollypop Sign' },
+            { code: 'FG1006', name: 'Pylons & Totems' },
+            { code: 'FG1007', name: 'Spreadors' },
+            { code: 'FG1008', name: 'Fabric Signs' },
+            { code: 'FG1009', name: 'Printed Vinyl' },
+            { code: 'FG1010', name: 'Glass Film' },
+            { code: 'FG1011', name: 'Internal Signs' },
+            { code: 'FG1012', name: 'External Campus Sign' },
+            { code: 'FG1013', name: 'Furniture' },
+            { code: 'FG1014', name: 'Decorative Lights' },
+            { code: 'FG1015', name: 'Other Charges' }
+        ];
+
+        const UNITS = ['Sq Inch', 'sqft', 'LS', 'Nos', 'Sqm', 'Rft', 'Set'];
+        const PAYMENT_TERMS = [
+            '100% Advance',
+            '50% Advance, 50% on Completion',
+            '30% Advance, 70% on Completion',
+            '100% on Completion',
+            '30-60-10 (Advance-Progress-Completion)',
+            'Custom'
+        ];
+
+        // SVG Icons
+        const PlusIcon = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+        );
+
+        const TrashIcon = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            </svg>
+        );
+
+        const UploadIcon = () => (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+        );
+
+        const DownloadIcon = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+        );
+
+        const CopyIcon = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+        );
+
+        const FileIcon = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+        );
+
+        function SignageCostingApp() {
+            const [quotationData, setQuotationData] = useState({
+                companyName: 'SIGN TECHNIC INDUSTRIES PVT LTD',
+                billTo: 'Third Wave Coffee',
+                quotationNo: '21',
+                quotationDate: '02-01-2026',
+                place: 'TWC Malad',
+                validity: '30 days',
+                paymentTerms: '50% Advance, 50% on Completion',
+                gstPercent: 18
+            });
+
+            const [lineItems, setLineItems] = useState([
+                { id: 1, image: null, description: '', specifications: '', qty: 0, unit: 'Sq Inch', rate: 0, amount: 0 }
+            ]);
+
+            const [materials, setMaterials] = useState([
+                { id: 1, item: 'Driver', make: 'OSRAM Fighter Pro', warranty: '3 Years' },
+                { id: 2, item: 'Led', make: 'OSRAM BA M CB 830 G1', warranty: '3 Years' },
+                { id: 3, item: 'Acrylic', make: 'Astan A Grade', warranty: '5 Years' },
+                { id: 4, item: 'Wires', make: 'Polycab FRLS', warranty: 'N/A' }
+            ]);
+
+            const [signature, setSignature] = useState(null);
+            const signatureRef = useRef(null);
+
+            const addLineItem = () => {
+                const newId = Math.max(...lineItems.map(item => item.id), 0) + 1;
+                setLineItems([...lineItems, { 
+                    id: newId, 
+                    image: null, 
+                    description: '', 
+                    specifications: '', 
+                    qty: 0, 
+                    unit: 'Sq Inch', 
+                    rate: 0, 
+                    amount: 0 
+                }]);
+            };
+
+            const removeLineItem = (id) => {
+                if (lineItems.length > 1) {
+                    setLineItems(lineItems.filter(item => item.id !== id));
+                }
+            };
+
+            const updateLineItem = (id, field, value) => {
+                setLineItems(lineItems.map(item => {
+                    if (item.id === id) {
+                        const updated = { ...item, [field]: value };
+                        if (field === 'qty' || field === 'rate') {
+                            updated.amount = (parseFloat(updated.qty) || 0) * (parseFloat(updated.rate) || 0);
+                        }
+                        return updated;
+                    }
+                    return item;
+                }));
+            };
+
+            const handleImageUpload = (id, e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        updateLineItem(id, 'image', reader.result);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const addMaterial = () => {
+                const newId = Math.max(...materials.map(m => m.id), 0) + 1;
+                setMaterials([...materials, { id: newId, item: '', make: '', warranty: '' }]);
+            };
+
+            const updateMaterial = (id, field, value) => {
+                setMaterials(materials.map(m => m.id === id ? { ...m, [field]: value } : m));
+            };
+
+            const removeMaterial = (id) => {
+                if (materials.length > 1) {
+                    setMaterials(materials.filter(m => m.id !== id));
+                }
+            };
+
+            const calculateSubtotal = () => {
+                return lineItems.reduce((sum, item) => sum + (item.amount || 0), 0);
+            };
+
+            const calculateGST = () => {
+                return (calculateSubtotal() * quotationData.gstPercent) / 100;
+            };
+
+            const calculateGrandTotal = () => {
+                return calculateSubtotal() + calculateGST();
+            };
+
+            const handleSignatureUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        setSignature(reader.result);
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const duplicateQuotation = () => {
+                const newQuotNo = prompt('Enter new quotation number:', parseInt(quotationData.quotationNo) + 1);
+                if (newQuotNo) {
+                    setQuotationData({ ...quotationData, quotationNo: newQuotNo, quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-') });
+                }
+            };
+
+            const exportToPDF = () => {
+                window.print();
+            };
+
+            const exportToExcel = () => {
+                let csv = 'SIGN TECHNIC INDUSTRIES PVT LTD\n\n';
+                csv += `BILL TO:,${quotationData.billTo}\n`;
+                csv += `Quotation No:,${quotationData.quotationNo},Quotation Date:,${quotationData.quotationDate}\n`;
+                csv += `Place:,${quotationData.place}\n\n`;
+                csv += 'SR.A,DESCRIPTION,Specifications,QTY,UNIT,RATE,AMOUNT\n';
+                
+                lineItems.forEach((item, idx) => {
+                    csv += `${idx + 1},${item.description},${item.specifications},${item.qty},${item.unit},${item.rate},${item.amount}\n`;
+                });
+                
+                csv += `\n,,,,,TOTAL,${calculateSubtotal().toFixed(2)}\n`;
+                csv += `,,,,,GST@${quotationData.gstPercent}% Charges,${calculateGST().toFixed(2)}\n`;
+                csv += `,,,,,GRAND TOTAL,${calculateGrandTotal().toFixed(2)}\n\n`;
+                csv += '\nMaterial Specifications\n';
+                csv += 'Item,Make,Warranty\n';
+                materials.forEach(m => {
+                    csv += `${m.item},${m.make},${m.warranty}\n`;
+                });
+                
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Quotation_${quotationData.quotationNo}.csv`;
+                a.click();
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50 p-4">
+                    <div className="max-w-7xl mx-auto bg-white shadow-lg print:shadow-none">
+                        {/* Action Buttons */}
+                        <div className="p-4 bg-blue-600 flex gap-2 flex-wrap print:hidden">
+                            <button onClick={duplicateQuotation} className="bg-white text-blue-600 px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-50">
+                                <CopyIcon /> Duplicate
+                            </button>
+                            <button onClick={exportToPDF} className="bg-white text-blue-600 px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-50">
+                                <DownloadIcon /> Export PDF
+                            </button>
+                            <button onClick={exportToExcel} className="bg-white text-blue-600 px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-50">
+                                <FileIcon /> Export Excel
+                            </button>
+                        </div>
+
+                        {/* Header */}
+                        <div className="bg-gray-800 text-white text-center py-4">
+                            <input
+                                type="text"
+                                value={quotationData.companyName}
+                                onChange={(e) => setQuotationData({ ...quotationData, companyName: e.target.value })}
+                                className="bg-transparent text-center text-2xl font-bold w-full border-none outline-none"
+                            />
+                        </div>
+
+                        {/* Quotation Info */}
+                        <div className="p-6 border-b-2 border-gray-800">
+                            <div className="grid grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label className="font-semibold">BILL TO:</label>
+                                    <input
+                                        type="text"
+                                        value={quotationData.billTo}
+                                        onChange={(e) => setQuotationData({ ...quotationData, billTo: e.target.value })}
+                                        className="w-full border-b border-gray-400 outline-none px-2 py-1"
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="font-semibold text-sm">Quotation No:</label>
+                                        <input
+                                            type="text"
+                                            value={quotationData.quotationNo}
+                                            onChange={(e) => setQuotationData({ ...quotationData, quotationNo: e.target.value })}
+                                            className="w-full border-b border-gray-400 outline-none px-2 py-1"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="font-semibold text-sm">Date:</label>
+                                        <input
+                                            type="text"
+                                            value={quotationData.quotationDate}
+                                            onChange={(e) => setQuotationData({ ...quotationData, quotationDate: e.target.value })}
+                                            className="w-full border-b border-gray-400 outline-none px-2 py-1"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                                <div>
+                                    <label className="font-semibold">Place:</label>
+                                    <input
+                                        type="text"
+                                        value={quotationData.place}
+                                        onChange={(e) => setQuotationData({ ...quotationData, place: e.target.value })}
+                                        className="w-full border-b border-gray-400 outline-none px-2 py-1"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="font-semibold">Validity:</label>
+                                    <select
+                                        value={quotationData.validity}
+                                        onChange={(e) => setQuotationData({ ...quotationData, validity: e.target.value })}
+                                        className="w-full border-b border-gray-400 outline-none px-2 py-1"
+                                    >
+                                        <option>15 days</option>
+                                        <option>30 days</option>
+                                        <option>45 days</option>
+                                        <option>60 days</option>
+                                        <option>90 days</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="font-semibold">Payment Terms:</label>
+                                    <select
+                                        value={quotationData.paymentTerms}
+                                        onChange={(e) => setQuotationData({ ...quotationData, paymentTerms: e.target.value })}
+                                        className="w-full border-b border-gray-400 outline-none px-2 py-1 text-sm"
+                                    >
+                                        {PAYMENT_TERMS.map(term => <option key={term}>{term}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Line Items Table */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full border-collapse">
+                                <thead>
+                                    <tr className="bg-blue-900 text-white">
+                                        <th className="border border-gray-300 px-2 py-2 w-12">SR.A</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-24">IMAGE</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-48">DESCRIPTION</th>
+                                        <th className="border border-gray-300 px-2 py-2">Specifications</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-20">QTY</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-24">UNIT</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-24">RATE</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-32">AMOUNT</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-12 print:hidden">DEL</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {lineItems.map((item, index) => (
+                                        <tr key={item.id}>
+                                            <td className="border border-gray-300 px-2 py-2 text-center">{index + 1}</td>
+                                            <td className="border border-gray-300 px-2 py-2">
+                                                {item.image ? (
+                                                    <img src={item.image} alt="Product" className="w-20 h-20 object-cover mx-auto" />
+                                                ) : (
+                                                    <label className="cursor-pointer flex flex-col items-center justify-center h-20 bg-gray-100 hover:bg-gray-200">
+                                                        <UploadIcon />
+                                                        <span className="text-xs text-gray-500">Upload</span>
+                                                        <input
+                                                            type="file"
+                                                            accept="image/*"
+                                                            onChange={(e) => handleImageUpload(item.id, e)}
+                                                            className="hidden"
+                                                        />
+                                                    </label>
+                                                )}
+                                            </td>
+                                            <td className="border border-gray-300 px-2 py-2">
+                                                <select
+                                                    value={item.description}
+                                                    onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
+                                                    className="w-full border-none outline-none bg-transparent"
+                                                >
+                                                    <option value="">Select Product</option>
+                                                    {PRODUCT_CATALOG.map(p => (
+                                                        <option key={p.code} value={`${p.code} - ${p.name}`}>{p.code} - {p.name}</option>
+                                                    ))}
+                                                </select>
+                                                <input
+                                                    type="text"
+                                                    value={item.description}
+                                                    onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
+                                                    placeholder="Or type description"
+                                                    className="w-full border-none outline-none mt-1 text-sm"
+                                                />
+                                            </td>
+                                            <td className="border border-gray-300 px-2 py-2">
+                                                <textarea
+                                                    value={item.specifications}
+                                                    onChange={(e) => updateLineItem(item.id, 'specifications', e.target.value)}
+                                                    placeholder="Enter specifications..."
+                                                    className="w-full border-none outline-none resize-none h-20"
+                                                />
+                                            </td>
+                                            <td className="border border-gray-300 px-2 py-2">
+                                                <input
+                                                    type="number"
+                                                    value={item.qty}
+                                                    onChange={(e) => updateLineItem(item.id, 'qty', e.target.value)}
+                                                    className="w-full border-none outline-none text-center"
+                                                />
+                                            </td>
+                                            <td className="border border-gray-300 px-2 py-2">
+                                                <select
+                                                    value={item.unit}
+                                                    onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                                                    className="w-full border-none outline-none"
+                                                >
+                                                    {UNITS.map(u => <option key={u}>{u}</option>)}
+                                                </select>
+                                            </td>
+                                            <td className="border border-gray-300 px-2 py-2">
+                                                <input
+                                                    type="number"
+                                                    value={item.rate}
+                                                    onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)}
+                                                    className="w-full border-none outline-none text-right"
+                                                />
+                                            </td>
+                                            <td className="border border-gray-300 px-2 py-2 text-right font-semibold">
+                                                {item.amount.toFixed(2)}
+                                            </td>
+                                            <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
+                                                <button onClick={() => removeLineItem(item.id)} className="text-red-500 hover:text-red-700">
+                                                    <TrashIcon />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <button
+                            onClick={addLineItem}
+                            className="m-4 bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700 print:hidden"
+                        >
+                            <PlusIcon /> Add Line Item
+                        </button>
+
+                        {/* Totals */}
+                        <div className="p-6 border-t-2 border-gray-800">
+                            <div className="flex justify-end">
+                                <div className="w-96">
+                                    <div className="flex justify-between py-2 border-b">
+                                        <span className="font-semibold">TOTAL</span>
+                                        <span className="font-semibold">{calculateSubtotal().toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between py-2 border-b">
+                                        <span>GST@<input type="number" value={quotationData.gstPercent} onChange={(e) => setQuotationData({ ...quotationData, gstPercent: parseFloat(e.target.value) || 0 })} className="w-12 border-none outline-none text-center" />% Charges</span>
+                                        <span>{calculateGST().toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between py-2 bg-blue-900 text-white px-2 font-bold text-lg">
+                                        <span>GRAND TOTAL</span>
+                                        <span>{calculateGrandTotal().toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Material Specifications */}
+                        <div className="p-6 border-t-2 border-gray-800">
+                            <h3 className="font-bold text-lg mb-4 bg-blue-900 text-white px-4 py-2">Material Specifications</h3>
+                            <table className="w-full border-collapse">
+                                <thead>
+                                    <tr className="bg-blue-800 text-white">
+                                        <th className="border border-gray-300 px-4 py-2">Item</th>
+                                        <th className="border border-gray-300 px-4 py-2">Make</th>
+                                        <th className="border border-gray-300 px-4 py-2">Warranty</th>
+                                        <th className="border border-gray-300 px-4 py-2 w-12 print:hidden">DEL</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {materials.map(m => (
+                                        <tr key={m.id}>
+                                            <td className="border border-gray-300 px-4 py-2">
+                                                <input
+                                                    type="text"
+                                                    value={m.item}
+                                                    onChange={(e) => updateMaterial(m.id, 'item', e.target.value)}
+                                                    className="w-full border-none outline-none"
+                                                />
+                                            </td>
+                                            <td className="border border-gray-300 px-4 py-2">
+                                                <input
+                                                    type="text"
+                                                    value={m.make}
+                                                    onChange={(e) => updateMaterial(m.id, 'make', e.target.value)}
+                                                    className="w-full border-none outline-none"
+                                                />
+                                            </td>
+                                            <td className="border border-gray-300 px-4 py-2">
+                                                <input
+                                                    type="text"
+                                                    value={m.warranty}
+                                                    onChange={(e) => updateMaterial(m.id, 'warranty', e.target.value)}
+                                                    className="w-full border-none outline-none"
+                                                />
+                                            </td>
+                                            <td className="border border-gray-300 px-4 py-2 text-center print:hidden">
+                                                <button onClick={() => removeMaterial(m.id)} className="text-red-500 hover:text-red-700">
+                                                    <TrashIcon />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            <button
+                                onClick={addMaterial}
+                                className="mt-4 bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700 print:hidden"
+                            >
+                                <PlusIcon /> Add Material
+                            </button>
+                        </div>
+
+                        {/* Signature Section */}
+                        <div className="p-6 border-t-2 border-gray-800">
+                            <div className="flex justify-end">
+                                <div className="text-center">
+                                    <p className="font-semibold mb-2">Authorized Signature</p>
+                                    {signature ? (
+                                        <img src={signature} alt="Signature" className="w-48 h-24 object-contain border border-gray-300" />
+                                    ) : (
+                                        <label className="cursor-pointer inline-block border-2 border-dashed border-gray-300 p-4 hover:bg-gray-50 print:hidden">
+                                            <UploadIcon />
+                                            <span className="text-sm text-gray-500">Upload Signature</span>
+                                            <input
+                                                ref={signatureRef}
+                                                type="file"
+                                                accept="image/*"
+                                                onChange={handleSignatureUpload}
+                                                className="hidden"
+                                            />
+                                        </label>
+                                    )}
+                                    <p className="mt-2 text-sm">{quotationData.companyName}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<SignageCostingApp />, document.getElementById('root'));
+    </script>
+</body>
+</html>
