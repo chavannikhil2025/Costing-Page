@@ -8,6 +8,7 @@
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         @media print {
             .print\\:hidden { display: none !important; }
@@ -218,31 +219,87 @@
             };
 
             const exportToExcel = () => {
-                let csv = 'SIGN TECHNIC INDUSTRIES PVT LTD\n\n';
-                csv += `BILL TO:,${quotationData.billTo}\n`;
-                csv += `Quotation No:,${quotationData.quotationNo},Quotation Date:,${quotationData.quotationDate}\n`;
-                csv += `Place:,${quotationData.place}\n\n`;
-                csv += 'SR.A,DESCRIPTION,Specifications,QTY,UNIT,RATE,AMOUNT\n';
+                // Create workbook
+                const wb = XLSX.utils.book_new();
                 
+                // Prepare data for main sheet
+                const wsData = [
+                    [quotationData.companyName],
+                    [],
+                    ['BILL TO:', quotationData.billTo],
+                    ['Quotation No:', quotationData.quotationNo, 'Quotation Date:', quotationData.quotationDate],
+                    ['Place:', quotationData.place, 'Validity:', quotationData.validity, 'Payment Terms:', quotationData.paymentTerms],
+                    [],
+                    ['SR.A', 'IMAGE', 'DESCRIPTION', 'Specifications', 'QTY', 'UNIT', 'RATE', 'AMOUNT']
+                ];
+                
+                // Add line items
                 lineItems.forEach((item, idx) => {
-                    csv += `${idx + 1},${item.description},${item.specifications},${item.qty},${item.unit},${item.rate},${item.amount}\n`;
+                    wsData.push([
+                        idx + 1,
+                        item.image ? 'Image Attached' : 'No Image',
+                        item.description,
+                        item.specifications,
+                        item.qty,
+                        item.unit,
+                        item.rate,
+                        item.amount.toFixed(2)
+                    ]);
                 });
                 
-                csv += `\n,,,,,TOTAL,${calculateSubtotal().toFixed(2)}\n`;
-                csv += `,,,,,GST@${quotationData.gstPercent}% Charges,${calculateGST().toFixed(2)}\n`;
-                csv += `,,,,,GRAND TOTAL,${calculateGrandTotal().toFixed(2)}\n\n`;
-                csv += '\nMaterial Specifications\n';
-                csv += 'Item,Make,Warranty\n';
+                // Add totals
+                wsData.push([]);
+                wsData.push(['', '', '', '', '', '', 'TOTAL', calculateSubtotal().toFixed(2)]);
+                wsData.push(['', '', '', '', '', '', `GST@${quotationData.gstPercent}% Charges`, calculateGST().toFixed(2)]);
+                wsData.push(['', '', '', '', '', '', 'GRAND TOTAL', calculateGrandTotal().toFixed(2)]);
+                wsData.push([]);
+                wsData.push([]);
+                wsData.push(['Material Specifications']);
+                wsData.push(['Item', 'Make', 'Warranty']);
+                
+                // Add materials
                 materials.forEach(m => {
-                    csv += `${m.item},${m.make},${m.warranty}\n`;
+                    wsData.push([m.item, m.make, m.warranty]);
                 });
                 
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Quotation_${quotationData.quotationNo}.csv`;
-                a.click();
+                // Create worksheet
+                const ws = XLSX.utils.aoa_to_sheet(wsData);
+                
+                // Set column widths
+                ws['!cols'] = [
+                    { wch: 6 },  // SR.A
+                    { wch: 15 }, // IMAGE
+                    { wch: 30 }, // DESCRIPTION
+                    { wch: 50 }, // Specifications
+                    { wch: 8 },  // QTY
+                    { wch: 10 }, // UNIT
+                    { wch: 12 }, // RATE
+                    { wch: 15 }  // AMOUNT
+                ];
+                
+                // Apply basic styling (note: requires xlsx-style or similar for full styling)
+                // Adding merge for company name
+                if (!ws['!merges']) ws['!merges'] = [];
+                ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } });
+                
+                // Add worksheet to workbook
+                XLSX.utils.book_append_sheet(wb, ws, 'Quotation');
+                
+                // Create images sheet if there are images
+                const imagesData = [['SR.A', 'Description', 'Image Info']];
+                lineItems.forEach((item, idx) => {
+                    if (item.image) {
+                        imagesData.push([idx + 1, item.description, 'Image data available in main document']);
+                    }
+                });
+                
+                if (imagesData.length > 1) {
+                    const wsImages = XLSX.utils.aoa_to_sheet(imagesData);
+                    XLSX.utils.book_append_sheet(wb, wsImages, 'Images Reference');
+                }
+                
+                // Save file
+                XLSX.writeFile(wb, `Quotation_${quotationData.quotationNo}.xlsx`);
             };
 
             return (
