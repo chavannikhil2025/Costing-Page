@@ -15,31 +15,82 @@
             .print\\:shadow-none { box-shadow: none !important; }
             body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
         }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useRef } = React;
+        const { useState, useRef, useEffect } = React;
 
-        const PRODUCT_CATALOG = [
-            { code: 'FG1001', name: 'Backlit Signs' },
-            { code: 'FG1002', name: 'Nonlit Signs' },
-            { code: 'FG1003', name: 'ACP/ACM Signs' },
-            { code: 'FG1004', name: '3D Letters Sign' },
-            { code: 'FG1005', name: 'Lollypop Sign' },
-            { code: 'FG1006', name: 'Pylons & Totems' },
-            { code: 'FG1007', name: 'Spreadors' },
-            { code: 'FG1008', name: 'Fabric Signs' },
-            { code: 'FG1009', name: 'Printed Vinyl' },
-            { code: 'FG1010', name: 'Glass Film' },
-            { code: 'FG1011', name: 'Internal Signs' },
-            { code: 'FG1012', name: 'External Campus Sign' },
-            { code: 'FG1013', name: 'Furniture' },
-            { code: 'FG1014', name: 'Decorative Lights' },
-            { code: 'FG1015', name: 'Other Charges' }
-        ];
+        // Default Product Database with specifications history
+        const DEFAULT_PRODUCT_DATABASE = {
+            'FG1001': { 
+                code: 'FG1001', 
+                name: 'Backlit Signs',
+                specifications: [
+                    'Front black aluminum beading with 040 acrylic, 60mm side black Aluminium raising with 3000K 3 Module LED.',
+                    'Aluminum frame with acrylic face and LED backlighting',
+                    'Custom size with waterproof LED modules'
+                ]
+            },
+            'FG1002': { 
+                code: 'FG1002', 
+                name: 'Nonlit Signs',
+                specifications: [
+                    'Aluminum composite panel with vinyl graphics',
+                    'Powder coated aluminum frame'
+                ]
+            },
+            'FG1003': { 
+                code: 'FG1003', 
+                name: 'ACP/ACM Signs',
+                specifications: [
+                    '3mm ACP with vinyl lettering',
+                    '4mm ACP cladding with digital print'
+                ]
+            },
+            'FG1004': { 
+                code: 'FG1004', 
+                name: '3D Letters Sign',
+                specifications: [
+                    'Stainless steel letters with LED backlighting',
+                    'Acrylic letters with LED modules'
+                ]
+            },
+            'FG1005': { code: 'FG1005', name: 'Lollypop Sign', specifications: [] },
+            'FG1006': { code: 'FG1006', name: 'Pylons & Totems', specifications: [] },
+            'FG1007': { code: 'FG1007', name: 'Spreadors', specifications: [] },
+            'FG1008': { code: 'FG1008', name: 'Fabric Signs', specifications: [] },
+            'FG1009': { code: 'FG1009', name: 'Printed Vinyl', specifications: [] },
+            'FG1010': { code: 'FG1010', name: 'Glass Film', specifications: [] },
+            'FG1011': { code: 'FG1011', name: 'Internal Signs', specifications: [] },
+            'FG1012': { code: 'FG1012', name: 'External Campus Sign', specifications: [] },
+            'FG1013': { code: 'FG1013', name: 'Furniture', specifications: [] },
+            'FG1014': { code: 'FG1014', name: 'Decorative Lights', specifications: [] },
+            'FG1015': { code: 'FG1015', name: 'Other Charges', specifications: [] }
+        };
 
         const UNITS = ['Sq Inch', 'sqft', 'LS', 'Nos', 'Sqm', 'Rft', 'Set'];
         const PAYMENT_TERMS = [
@@ -99,20 +150,191 @@
             </svg>
         );
 
+        const CalculatorIcon = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="4" y="2" width="16" height="20" rx="2"></rect>
+                <line x1="8" y1="6" x2="16" y2="6"></line>
+                <line x1="8" y1="10" x2="8" y2="10"></line>
+                <line x1="12" y1="10" x2="12" y2="10"></line>
+                <line x1="16" y1="10" x2="16" y2="10"></line>
+                <line x1="8" y1="14" x2="8" y2="14"></line>
+                <line x1="12" y1="14" x2="12" y2="14"></line>
+                <line x1="16" y1="14" x2="16" y2="14"></line>
+                <line x1="8" y1="18" x2="8" y2="18"></line>
+                <line x1="12" y1="18" x2="12" y2="18"></line>
+                <line x1="16" y1="18" x2="16" y2="18"></line>
+            </svg>
+        );
+
+        const RefreshIcon = () => (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="23 4 23 10 17 10"></polyline>
+                <polyline points="1 20 1 14 7 14"></polyline>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
+        );
+
+        // MM to Sq Inch/Sqft Calculator Modal
+        function CalculatorModal({ isOpen, onClose, onApply }) {
+            const [measurements, setMeasurements] = useState({
+                length: '',
+                width: '',
+                quantity: 1,
+                outputUnit: 'Sq Inch'
+            });
+
+            const calculateArea = () => {
+                const length = parseFloat(measurements.length) || 0;
+                const width = parseFloat(measurements.width) || 0;
+                const qty = parseFloat(measurements.quantity) || 1;
+                
+                // Convert MM to Sq Inch or Sqft
+                const areaMM2 = length * width;
+                const areaInch2 = areaMM2 / 645.16; // 1 sq inch = 645.16 sq mm
+                const areaFt2 = areaMM2 / 92903.04; // 1 sq ft = 92903.04 sq mm
+                
+                if (measurements.outputUnit === 'Sq Inch') {
+                    return { area: areaInch2 * qty, unit: 'Sq Inch' };
+                } else {
+                    return { area: areaFt2 * qty, unit: 'sqft' };
+                }
+            };
+
+            const handleApply = () => {
+                const result = calculateArea();
+                onApply(result);
+                onClose();
+            };
+
+            if (!isOpen) return null;
+
+            const result = calculateArea();
+
+            return (
+                <div className="modal-overlay" onClick={onClose}>
+                    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+                        <h2 className="text-2xl font-bold mb-4">Area Calculator (MM to Sq Inch/Sqft)</h2>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block font-semibold mb-1">Length (MM)</label>
+                                <input
+                                    type="number"
+                                    value={measurements.length}
+                                    onChange={(e) => setMeasurements({...measurements, length: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2"
+                                    placeholder="Enter length in millimeters"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block font-semibold mb-1">Width (MM)</label>
+                                <input
+                                    type="number"
+                                    value={measurements.width}
+                                    onChange={(e) => setMeasurements({...measurements, width: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2"
+                                    placeholder="Enter width in millimeters"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block font-semibold mb-1">Quantity</label>
+                                <input
+                                    type="number"
+                                    value={measurements.quantity}
+                                    onChange={(e) => setMeasurements({...measurements, quantity: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2"
+                                    placeholder="Number of pieces"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block font-semibold mb-1">Output Unit</label>
+                                <select
+                                    value={measurements.outputUnit}
+                                    onChange={(e) => setMeasurements({...measurements, outputUnit: e.target.value})}
+                                    className="w-full border border-gray-300 rounded px-3 py-2"
+                                >
+                                    <option>Sq Inch</option>
+                                    <option>sqft</option>
+                                </select>
+                            </div>
+                            
+                            <div className="bg-blue-50 p-4 rounded">
+                                <p className="text-lg font-semibold">Result:</p>
+                                <p className="text-2xl text-blue-600 font-bold">
+                                    {result.area.toFixed(2)} {result.unit}
+                                </p>
+                                <p className="text-sm text-gray-600 mt-2">
+                                    ({measurements.length || 0} mm × {measurements.width || 0} mm × {measurements.quantity || 1} qty)
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div className="flex gap-2 mt-6">
+                            <button
+                                onClick={handleApply}
+                                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                            >
+                                Apply to Line Item
+                            </button>
+                            <button
+                                onClick={onClose}
+                                className="flex-1 bg-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-400"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
         function SignageCostingApp() {
+            // Load data from memory
+            const loadFromMemory = (key, defaultValue) => {
+                try {
+                    const saved = localStorage.getItem(key);
+                    return saved ? JSON.parse(saved) : defaultValue;
+                } catch {
+                    return defaultValue;
+                }
+            };
+
+            const saveToMemory = (key, value) => {
+                try {
+                    localStorage.setItem(key, JSON.stringify(value));
+                } catch (e) {
+                    console.error('Save failed:', e);
+                }
+            };
+
+            // Get next quotation number
+            const getNextQuotationNo = () => {
+                const lastNo = loadFromMemory('lastQuotationNo', 0);
+                const nextNo = lastNo + 1;
+                saveToMemory('lastQuotationNo', nextNo);
+                return nextNo.toString();
+            };
+
+            const [productDatabase, setProductDatabase] = useState(
+                loadFromMemory('productDatabase', DEFAULT_PRODUCT_DATABASE)
+            );
+
             const [quotationData, setQuotationData] = useState({
                 companyName: 'SIGN TECHNIC INDUSTRIES PVT LTD',
-                billTo: 'Third Wave Coffee',
-                quotationNo: '21',
-                quotationDate: '02-01-2026',
-                place: 'TWC Malad',
+                billTo: '',
+                quotationNo: getNextQuotationNo(),
+                quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-'),
+                place: '',
                 validity: '30 days',
                 paymentTerms: '50% Advance, 50% on Completion',
                 gstPercent: 18
             });
 
             const [lineItems, setLineItems] = useState([
-                { id: 1, image: null, description: '', specifications: '', qty: 0, unit: 'Sq Inch', rate: 0, amount: 0 }
+                { id: 1, image: null, productCode: '', description: '', specifications: '', qty: 0, unit: 'Sq Inch', rate: 0, amount: 0 }
             ]);
 
             const [materials, setMaterials] = useState([
@@ -123,13 +345,21 @@
             ]);
 
             const [signature, setSignature] = useState(null);
+            const [showCalculator, setShowCalculator] = useState(false);
+            const [calculatorTarget, setCalculatorTarget] = useState(null);
             const signatureRef = useRef(null);
+
+            // Save product database to memory whenever it changes
+            useEffect(() => {
+                saveToMemory('productDatabase', productDatabase);
+            }, [productDatabase]);
 
             const addLineItem = () => {
                 const newId = Math.max(...lineItems.map(item => item.id), 0) + 1;
                 setLineItems([...lineItems, { 
                     id: newId, 
-                    image: null, 
+                    image: null,
+                    productCode: '',
                     description: '', 
                     specifications: '', 
                     qty: 0, 
@@ -149,6 +379,15 @@
                 setLineItems(lineItems.map(item => {
                     if (item.id === id) {
                         const updated = { ...item, [field]: value };
+                        
+                        // If product code changes, load specifications history
+                        if (field === 'productCode' && value) {
+                            const product = productDatabase[value];
+                            if (product) {
+                                updated.description = `${product.code} - ${product.name}`;
+                            }
+                        }
+                        
                         if (field === 'qty' || field === 'rate') {
                             updated.amount = (parseFloat(updated.qty) || 0) * (parseFloat(updated.rate) || 0);
                         }
@@ -167,6 +406,25 @@
                     };
                     reader.readAsDataURL(file);
                 }
+            };
+
+            const handleSpecificationSelect = (id, spec) => {
+                const item = lineItems.find(i => i.id === id);
+                if (item && item.productCode) {
+                    // Save this specification to product database if not already there
+                    const product = productDatabase[item.productCode];
+                    if (product && !product.specifications.includes(spec)) {
+                        const updatedProduct = {
+                            ...product,
+                            specifications: [...product.specifications, spec]
+                        };
+                        setProductDatabase({
+                            ...productDatabase,
+                            [item.productCode]: updatedProduct
+                        });
+                    }
+                }
+                updateLineItem(id, 'specifications', spec);
             };
 
             const addMaterial = () => {
@@ -207,10 +465,49 @@
                 }
             };
 
+            const openCalculator = (itemId) => {
+                setCalculatorTarget(itemId);
+                setShowCalculator(true);
+            };
+
+            const applyCalculation = (result) => {
+                if (calculatorTarget) {
+                    updateLineItem(calculatorTarget, 'qty', result.area.toFixed(2));
+                    updateLineItem(calculatorTarget, 'unit', result.unit);
+                }
+            };
+
             const duplicateQuotation = () => {
-                const newQuotNo = prompt('Enter new quotation number:', parseInt(quotationData.quotationNo) + 1);
-                if (newQuotNo) {
-                    setQuotationData({ ...quotationData, quotationNo: newQuotNo, quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-') });
+                const newQuotNo = getNextQuotationNo();
+                setQuotationData({ 
+                    ...quotationData, 
+                    quotationNo: newQuotNo, 
+                    quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-') 
+                });
+            };
+
+            const clearAll = () => {
+                if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+                    setQuotationData({
+                        companyName: 'SIGN TECHNIC INDUSTRIES PVT LTD',
+                        billTo: '',
+                        quotationNo: getNextQuotationNo(),
+                        quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-'),
+                        place: '',
+                        validity: '30 days',
+                        paymentTerms: '50% Advance, 50% on Completion',
+                        gstPercent: 18
+                    });
+                    setLineItems([
+                        { id: 1, image: null, productCode: '', description: '', specifications: '', qty: 0, unit: 'Sq Inch', rate: 0, amount: 0 }
+                    ]);
+                    setMaterials([
+                        { id: 1, item: 'Driver', make: 'OSRAM Fighter Pro', warranty: '3 Years' },
+                        { id: 2, item: 'Led', make: 'OSRAM BA M CB 830 G1', warranty: '3 Years' },
+                        { id: 3, item: 'Acrylic', make: 'Astan A Grade', warranty: '5 Years' },
+                        { id: 4, item: 'Wires', make: 'Polycab FRLS', warranty: 'N/A' }
+                    ]);
+                    setSignature(null);
                 }
             };
 
@@ -219,10 +516,8 @@
             };
 
             const exportToExcel = () => {
-                // Create workbook
                 const wb = XLSX.utils.book_new();
                 
-                // Prepare data for main sheet
                 const wsData = [
                     [quotationData.companyName],
                     [],
@@ -233,7 +528,6 @@
                     ['SR.A', 'IMAGE', 'DESCRIPTION', 'Specifications', 'QTY', 'UNIT', 'RATE', 'AMOUNT']
                 ];
                 
-                // Add line items
                 lineItems.forEach((item, idx) => {
                     wsData.push([
                         idx + 1,
@@ -247,7 +541,6 @@
                     ]);
                 });
                 
-                // Add totals
                 wsData.push([]);
                 wsData.push(['', '', '', '', '', '', 'TOTAL', calculateSubtotal().toFixed(2)]);
                 wsData.push(['', '', '', '', '', '', `GST@${quotationData.gstPercent}% Charges`, calculateGST().toFixed(2)]);
@@ -257,53 +550,38 @@
                 wsData.push(['Material Specifications']);
                 wsData.push(['Item', 'Make', 'Warranty']);
                 
-                // Add materials
                 materials.forEach(m => {
                     wsData.push([m.item, m.make, m.warranty]);
                 });
                 
-                // Create worksheet
                 const ws = XLSX.utils.aoa_to_sheet(wsData);
                 
-                // Set column widths
                 ws['!cols'] = [
-                    { wch: 6 },  // SR.A
-                    { wch: 15 }, // IMAGE
-                    { wch: 30 }, // DESCRIPTION
-                    { wch: 50 }, // Specifications
-                    { wch: 8 },  // QTY
-                    { wch: 10 }, // UNIT
-                    { wch: 12 }, // RATE
-                    { wch: 15 }  // AMOUNT
+                    { wch: 6 },
+                    { wch: 15 },
+                    { wch: 30 },
+                    { wch: 50 },
+                    { wch: 8 },
+                    { wch: 10 },
+                    { wch: 12 },
+                    { wch: 15 }
                 ];
                 
-                // Apply basic styling (note: requires xlsx-style or similar for full styling)
-                // Adding merge for company name
                 if (!ws['!merges']) ws['!merges'] = [];
                 ws['!merges'].push({ s: { r: 0, c: 0 }, e: { r: 0, c: 7 } });
                 
-                // Add worksheet to workbook
                 XLSX.utils.book_append_sheet(wb, ws, 'Quotation');
-                
-                // Create images sheet if there are images
-                const imagesData = [['SR.A', 'Description', 'Image Info']];
-                lineItems.forEach((item, idx) => {
-                    if (item.image) {
-                        imagesData.push([idx + 1, item.description, 'Image data available in main document']);
-                    }
-                });
-                
-                if (imagesData.length > 1) {
-                    const wsImages = XLSX.utils.aoa_to_sheet(imagesData);
-                    XLSX.utils.book_append_sheet(wb, wsImages, 'Images Reference');
-                }
-                
-                // Save file
                 XLSX.writeFile(wb, `Quotation_${quotationData.quotationNo}.xlsx`);
             };
 
             return (
                 <div className="min-h-screen bg-gray-50 p-4">
+                    <CalculatorModal 
+                        isOpen={showCalculator} 
+                        onClose={() => setShowCalculator(false)}
+                        onApply={applyCalculation}
+                    />
+                    
                     <div className="max-w-7xl mx-auto bg-white shadow-lg print:shadow-none">
                         {/* Action Buttons */}
                         <div className="p-4 bg-blue-600 flex gap-2 flex-wrap print:hidden">
@@ -315,6 +593,9 @@
                             </button>
                             <button onClick={exportToExcel} className="bg-white text-blue-600 px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-50">
                                 <FileIcon /> Export Excel
+                            </button>
+                            <button onClick={clearAll} className="bg-red-500 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-red-600 ml-auto">
+                                <RefreshIcon /> Clear All
                             </button>
                         </div>
 
@@ -346,8 +627,9 @@
                                         <input
                                             type="text"
                                             value={quotationData.quotationNo}
-                                            onChange={(e) => setQuotationData({ ...quotationData, quotationNo: e.target.value })}
-                                            className="w-full border-b border-gray-400 outline-none px-2 py-1"
+                                            readOnly
+                                            className="w-full border-b border-gray-400 outline-none px-2 py-1 bg-gray-50"
+                                            title="Auto-generated"
                                         />
                                     </div>
                                     <div>
@@ -411,91 +693,120 @@
                                         <th className="border border-gray-300 px-2 py-2 w-24">UNIT</th>
                                         <th className="border border-gray-300 px-2 py-2 w-24">RATE</th>
                                         <th className="border border-gray-300 px-2 py-2 w-32">AMOUNT</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-16 print:hidden">CALC</th>
                                         <th className="border border-gray-300 px-2 py-2 w-12 print:hidden">DEL</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {lineItems.map((item, index) => (
-                                        <tr key={item.id}>
-                                            <td className="border border-gray-300 px-2 py-2 text-center">{index + 1}</td>
-                                            <td className="border border-gray-300 px-2 py-2">
-                                                {item.image ? (
-                                                    <img src={item.image} alt="Product" className="w-20 h-20 object-cover mx-auto" />
-                                                ) : (
-                                                    <label className="cursor-pointer flex flex-col items-center justify-center h-20 bg-gray-100 hover:bg-gray-200">
-                                                        <UploadIcon />
-                                                        <span className="text-xs text-gray-500">Upload</span>
-                                                        <input
-                                                            type="file"
-                                                            accept="image/*"
-                                                            onChange={(e) => handleImageUpload(item.id, e)}
-                                                            className="hidden"
-                                                        />
-                                                    </label>
-                                                )}
-                                            </td>
-                                            <td className="border border-gray-300 px-2 py-2">
-                                                <select
-                                                    value={item.description}
-                                                    onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                                                    className="w-full border-none outline-none bg-transparent"
-                                                >
-                                                    <option value="">Select Product</option>
-                                                    {PRODUCT_CATALOG.map(p => (
-                                                        <option key={p.code} value={`${p.code} - ${p.name}`}>{p.code} - {p.name}</option>
-                                                    ))}
-                                                </select>
-                                                <input
-                                                    type="text"
-                                                    value={item.description}
-                                                    onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                                                    placeholder="Or type description"
-                                                    className="w-full border-none outline-none mt-1 text-sm"
-                                                />
-                                            </td>
-                                            <td className="border border-gray-300 px-2 py-2">
-                                                <textarea
-                                                    value={item.specifications}
-                                                    onChange={(e) => updateLineItem(item.id, 'specifications', e.target.value)}
-                                                    placeholder="Enter specifications..."
-                                                    className="w-full border-none outline-none resize-none h-20"
-                                                />
-                                            </td>
-                                            <td className="border border-gray-300 px-2 py-2">
-                                                <input
-                                                    type="number"
-                                                    value={item.qty}
-                                                    onChange={(e) => updateLineItem(item.id, 'qty', e.target.value)}
-                                                    className="w-full border-none outline-none text-center"
-                                                />
-                                            </td>
-                                            <td className="border border-gray-300 px-2 py-2">
-                                                <select
-                                                    value={item.unit}
-                                                    onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                                                    className="w-full border-none outline-none"
-                                                >
-                                                    {UNITS.map(u => <option key={u}>{u}</option>)}
-                                                </select>
-                                            </td>
-                                            <td className="border border-gray-300 px-2 py-2">
-                                                <input
-                                                    type="number"
-                                                    value={item.rate}
-                                                    onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)}
-                                                    className="w-full border-none outline-none text-right"
-                                                />
-                                            </td>
-                                            <td className="border border-gray-300 px-2 py-2 text-right font-semibold">
-                                                {item.amount.toFixed(2)}
-                                            </td>
-                                            <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
-                                                <button onClick={() => removeLineItem(item.id)} className="text-red-500 hover:text-red-700">
-                                                    <TrashIcon />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {lineItems.map((item, index) => {
+                                        const currentProduct = item.productCode ? productDatabase[item.productCode] : null;
+                                        const availableSpecs = currentProduct ? currentProduct.specifications : [];
+                                        
+                                        return (
+                                            <tr key={item.id}>
+                                                <td className="border border-gray-300 px-2 py-2 text-center">{index + 1}</td>
+                                                <td className="border border-gray-300 px-2 py-2">
+                                                    {item.image ? (
+                                                        <img src={item.image} alt="Product" className="w-20 h-20 object-cover mx-auto" />
+                                                    ) : (
+                                                        <label className="cursor-pointer flex flex-col items-center justify-center h-20 bg-gray-100 hover:bg-gray-200">
+                                                            <UploadIcon />
+                                                            <span className="text-xs text-gray-500">Upload</span>
+                                                            <input
+                                                                type="file"
+                                                                accept="image/*"
+                                                                onChange={(e) => handleImageUpload(item.id, e)}
+                                                                className="hidden"
+                                                            />
+                                                        </label>
+                                                    )}
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2">
+                                                    <select
+                                                        value={item.productCode}
+                                                        onChange={(e) => updateLineItem(item.id, 'productCode', e.target.value)}
+                                                        className="w-full border-none outline-none bg-transparent mb-1"
+                                                    >
+                                                        <option value="">Select Product</option>
+                                                        {Object.values(productDatabase).map(p => (
+                                                            <option key={p.code} value={p.code}>{p.code} - {p.name}</option>
+                                                        ))}
+                                                    </select>
+                                                    <input
+                                                        type="text"
+                                                        value={item.description}
+                                                        onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
+                                                        placeholder="Or type description"
+                                                        className="w-full border-none outline-none text-sm"
+                                                    />
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2">
+                                                    {availableSpecs.length > 0 && (
+                                                        <select
+                                                            value={item.specifications}
+                                                            onChange={(e) => handleSpecificationSelect(item.id, e.target.value)}
+                                                            className="w-full border border-gray-300 rounded px-2 py-1 mb-2 text-sm"
+                                                        >
+                                                            <option value="">Select from history...</option>
+                                                            {availableSpecs.map((spec, idx) => (
+                                                                <option key={idx} value={spec}>{spec.substring(0, 50)}...</option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                    <textarea
+                                                        value={item.specifications}
+                                                        onChange={(e) => updateLineItem(item.id, 'specifications', e.target.value)}
+                                                        placeholder="Enter specifications..."
+                                                        className="w-full border-none outline-none resize-none h-16"
+                                                    />
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2">
+                                                    <input
+                                                        type="number"
+                                                        value={item.qty}
+                                                        onChange={(e) => updateLineItem(item.id, 'qty', e.target.value)}
+                                                        className="w-full border-none outline-none text-center"
+                                                        step="0.01"
+                                                    />
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2">
+                                                    <select
+                                                        value={item.unit}
+                                                        onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                                                        className="w-full border-none outline-none"
+                                                    >
+                                                        {UNITS.map(u => <option key={u}>{u}</option>)}
+                                                    </select>
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2">
+                                                    <input
+                                                        type="number"
+                                                        value={item.rate}
+                                                        onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)}
+                                                        className="w-full border-none outline-none text-right"
+                                                        step="0.01"
+                                                    />
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2 text-right font-semibold">
+                                                    {item.amount.toFixed(2)}
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
+                                                    <button 
+                                                        onClick={() => openCalculator(item.id)} 
+                                                        className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
+                                                        title="Calculate from MM"
+                                                    >
+                                                        <CalculatorIcon />
+                                                    </button>
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
+                                                    <button onClick={() => removeLineItem(item.id)} className="text-red-500 hover:text-red-700">
+                                                        <TrashIcon />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
