@@ -563,26 +563,32 @@
 
             const clearAll = () => {
                 if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
-                    const newQuotationNo = getNextQuotationNo();
+                    // Generate new quotation number FIRST
+                    const newQuotNo = getNextQuotationNo();
+                    
+                    // Then update all state
                     setQuotationData({
                         companyName: 'SIGN TECHNIC INDUSTRIES PVT LTD',
                         billTo: '',
-                        quotationNo: newQuotationNo,
+                        quotationNo: newQuotNo,
                         quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-'),
                         place: '',
                         validity: '30 days',
                         paymentTerms: '50% Advance, 50% on Completion',
                         gstPercent: 18
                     });
+                    
                     setLineItems([
                         { id: 1, image: null, productCode: '', description: '', specifications: '', qty: 0, unit: 'Sq Inch', rate: 0, amount: 0, isPercentage: false }
                     ]);
+                    
                     setMaterials([
                         { id: 1, item: 'Driver', make: 'OSRAM Fighter Pro', warranty: '3 Years' },
                         { id: 2, item: 'Led', make: 'OSRAM BA M CB 830 G1', warranty: '3 Years' },
                         { id: 3, item: 'Acrylic', make: 'Astan A Grade', warranty: '5 Years' },
                         { id: 4, item: 'Wires', make: 'Polycab FRLS', warranty: 'N/A' }
                     ]);
+                    
                     setSignature(null);
                 }
             };
