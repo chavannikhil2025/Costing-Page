@@ -174,13 +174,16 @@
             </svg>
         );
 
-        // MM to Sq Inch/Sqft Calculator Modal
+        // MM to Inch Calculator Modal
         function CalculatorModal({ isOpen, onClose, onApply }) {
+            const [calcMode, setCalcMode] = useState('area'); // 'area' or 'running'
             const [measurements, setMeasurements] = useState({
                 length: '',
                 width: '',
                 quantity: 1,
-                outputUnit: 'Sq Inch'
+                outputUnit: 'Sq Inch',
+                letterHeight: '',
+                numberOfLetters: ''
             });
 
             const calculateArea = () => {
@@ -188,78 +191,153 @@
                 const width = parseFloat(measurements.width) || 0;
                 const qty = parseFloat(measurements.quantity) || 1;
                 
-                // Convert MM to Sq Inch or Sqft
-                const areaMM2 = length * width;
-                const areaInch2 = areaMM2 / 645.16; // 1 sq inch = 645.16 sq mm
-                const areaFt2 = areaMM2 / 92903.04; // 1 sq ft = 92903.04 sq mm
+                // Convert MM to Inch first
+                const lengthInch = length / 25.4; // 1 inch = 25.4 mm
+                const widthInch = width / 25.4;
+                
+                // Calculate area
+                const areaInch2 = lengthInch * widthInch * qty;
+                const areaFt2 = areaInch2 / 144; // 144 sq inch = 1 sq ft
                 
                 if (measurements.outputUnit === 'Sq Inch') {
-                    return { area: areaInch2 * qty, unit: 'Sq Inch' };
+                    return { area: areaInch2, unit: 'Sq Inch', formula: `${lengthInch.toFixed(2)}" × ${widthInch.toFixed(2)}" × ${qty}` };
                 } else {
-                    return { area: areaFt2 * qty, unit: 'sqft' };
+                    return { area: areaFt2, unit: 'sqft', formula: `${lengthInch.toFixed(2)}" × ${widthInch.toFixed(2)}" × ${qty} ÷ 144` };
                 }
             };
 
+            const calculateRunningInches = () => {
+                const letterHeight = parseFloat(measurements.letterHeight) || 0;
+                const numberOfLetters = parseFloat(measurements.numberOfLetters) || 1;
+                
+                // Convert MM to Inch
+                const heightInch = letterHeight / 25.4;
+                
+                // Total Running Inches = Letter Height (in inches) × Number of Letters
+                const totalRunningInches = heightInch * numberOfLetters;
+                
+                return { 
+                    area: totalRunningInches, 
+                    unit: 'Inch', 
+                    formula: `${heightInch.toFixed(2)}" × ${numberOfLetters} letters`
+                };
+            };
+
             const handleApply = () => {
-                const result = calculateArea();
+                const result = calcMode === 'area' ? calculateArea() : calculateRunningInches();
                 onApply(result);
                 onClose();
             };
 
             if (!isOpen) return null;
 
-            const result = calculateArea();
+            const result = calcMode === 'area' ? calculateArea() : calculateRunningInches();
 
             return (
                 <div className="modal-overlay" onClick={onClose}>
                     <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-                        <h2 className="text-2xl font-bold mb-4">Area Calculator (MM to Sq Inch/Sqft)</h2>
+                        <h2 className="text-2xl font-bold mb-4">Measurement Calculator</h2>
                         
+                        {/* Calculation Mode Selector */}
+                        <div className="mb-4">
+                            <label className="block font-semibold mb-2">Calculation Type:</label>
+                            <div className="flex gap-4">
+                                <label className="flex items-center">
+                                    <input
+                                        type="radio"
+                                        value="area"
+                                        checked={calcMode === 'area'}
+                                        onChange={(e) => setCalcMode(e.target.value)}
+                                        className="mr-2"
+                                    />
+                                    Area Calculation (H × W × Qty)
+                                </label>
+                                <label className="flex items-center">
+                                    <input
+                                        type="radio"
+                                        value="running"
+                                        checked={calcMode === 'running'}
+                                        onChange={(e) => setCalcMode(e.target.value)}
+                                        className="mr-2"
+                                    />
+                                    Running Inches (Letter Height × Count)
+                                </label>
+                            </div>
+                        </div>
+
                         <div className="space-y-4">
-                            <div>
-                                <label className="block font-semibold mb-1">Length (MM)</label>
-                                <input
-                                    type="number"
-                                    value={measurements.length}
-                                    onChange={(e) => setMeasurements({...measurements, length: e.target.value})}
-                                    className="w-full border border-gray-300 rounded px-3 py-2"
-                                    placeholder="Enter length in millimeters"
-                                />
-                            </div>
-                            
-                            <div>
-                                <label className="block font-semibold mb-1">Width (MM)</label>
-                                <input
-                                    type="number"
-                                    value={measurements.width}
-                                    onChange={(e) => setMeasurements({...measurements, width: e.target.value})}
-                                    className="w-full border border-gray-300 rounded px-3 py-2"
-                                    placeholder="Enter width in millimeters"
-                                />
-                            </div>
-                            
-                            <div>
-                                <label className="block font-semibold mb-1">Quantity</label>
-                                <input
-                                    type="number"
-                                    value={measurements.quantity}
-                                    onChange={(e) => setMeasurements({...measurements, quantity: e.target.value})}
-                                    className="w-full border border-gray-300 rounded px-3 py-2"
-                                    placeholder="Number of pieces"
-                                />
-                            </div>
-                            
-                            <div>
-                                <label className="block font-semibold mb-1">Output Unit</label>
-                                <select
-                                    value={measurements.outputUnit}
-                                    onChange={(e) => setMeasurements({...measurements, outputUnit: e.target.value})}
-                                    className="w-full border border-gray-300 rounded px-3 py-2"
-                                >
-                                    <option>Sq Inch</option>
-                                    <option>sqft</option>
-                                </select>
-                            </div>
+                            {calcMode === 'area' ? (
+                                <>
+                                    <div>
+                                        <label className="block font-semibold mb-1">Height/Length (MM)</label>
+                                        <input
+                                            type="number"
+                                            value={measurements.length}
+                                            onChange={(e) => setMeasurements({...measurements, length: e.target.value})}
+                                            className="w-full border border-gray-300 rounded px-3 py-2"
+                                            placeholder="Enter height in millimeters"
+                                        />
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block font-semibold mb-1">Width (MM)</label>
+                                        <input
+                                            type="number"
+                                            value={measurements.width}
+                                            onChange={(e) => setMeasurements({...measurements, width: e.target.value})}
+                                            className="w-full border border-gray-300 rounded px-3 py-2"
+                                            placeholder="Enter width in millimeters"
+                                        />
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block font-semibold mb-1">Quantity (Count)</label>
+                                        <input
+                                            type="number"
+                                            value={measurements.quantity}
+                                            onChange={(e) => setMeasurements({...measurements, quantity: e.target.value})}
+                                            className="w-full border border-gray-300 rounded px-3 py-2"
+                                            placeholder="Number of pieces"
+                                        />
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block font-semibold mb-1">Output Unit</label>
+                                        <select
+                                            value={measurements.outputUnit}
+                                            onChange={(e) => setMeasurements({...measurements, outputUnit: e.target.value})}
+                                            className="w-full border border-gray-300 rounded px-3 py-2"
+                                        >
+                                            <option>Sq Inch</option>
+                                            <option>sqft</option>
+                                        </select>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div>
+                                        <label className="block font-semibold mb-1">Letter Height (MM)</label>
+                                        <input
+                                            type="number"
+                                            value={measurements.letterHeight}
+                                            onChange={(e) => setMeasurements({...measurements, letterHeight: e.target.value})}
+                                            className="w-full border border-gray-300 rounded px-3 py-2"
+                                            placeholder="Enter letter height in millimeters"
+                                        />
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block font-semibold mb-1">Number of Letters</label>
+                                        <input
+                                            type="number"
+                                            value={measurements.numberOfLetters}
+                                            onChange={(e) => setMeasurements({...measurements, numberOfLetters: e.target.value})}
+                                            className="w-full border border-gray-300 rounded px-3 py-2"
+                                            placeholder="Total count of letters/characters"
+                                        />
+                                    </div>
+                                </>
+                            )}
                             
                             <div className="bg-blue-50 p-4 rounded">
                                 <p className="text-lg font-semibold">Result:</p>
@@ -267,7 +345,7 @@
                                     {result.area.toFixed(2)} {result.unit}
                                 </p>
                                 <p className="text-sm text-gray-600 mt-2">
-                                    ({measurements.length || 0} mm × {measurements.width || 0} mm × {measurements.quantity || 1} qty)
+                                    Calculation: {result.formula}
                                 </p>
                             </div>
                         </div>
@@ -334,7 +412,7 @@
             });
 
             const [lineItems, setLineItems] = useState([
-                { id: 1, image: null, productCode: '', description: '', specifications: '', qty: 0, unit: 'Sq Inch', rate: 0, amount: 0 }
+                { id: 1, image: null, productCode: '', description: '', specifications: '', qty: 0, unit: 'Sq Inch', rate: 0, amount: 0, isPercentage: false, percentageOf: 'subtotal' }
             ]);
 
             const [materials, setMaterials] = useState([
@@ -365,7 +443,9 @@
                     qty: 0, 
                     unit: 'Sq Inch', 
                     rate: 0, 
-                    amount: 0 
+                    amount: 0,
+                    isPercentage: false,
+                    percentageOf: 'subtotal'
                 }]);
             };
 
@@ -388,8 +468,28 @@
                             }
                         }
                         
-                        if (field === 'qty' || field === 'rate') {
-                            updated.amount = (parseFloat(updated.qty) || 0) * (parseFloat(updated.rate) || 0);
+                        // Handle percentage-based calculations
+                        if (field === 'isPercentage') {
+                            updated.isPercentage = value;
+                            if (value) {
+                                updated.unit = '%';
+                                updated.qty = 1;
+                            } else {
+                                updated.unit = 'Sq Inch';
+                            }
+                        }
+                        
+                        // Calculate amount
+                        if (updated.isPercentage) {
+                            // Calculate percentage of subtotal (excluding percentage items)
+                            const baseSubtotal = lineItems
+                                .filter(i => i.id !== id && !i.isPercentage)
+                                .reduce((sum, i) => sum + (i.amount || 0), 0);
+                            updated.amount = (baseSubtotal * (parseFloat(updated.rate) || 0)) / 100;
+                        } else {
+                            if (field === 'qty' || field === 'rate') {
+                                updated.amount = (parseFloat(updated.qty) || 0) * (parseFloat(updated.rate) || 0);
+                            }
                         }
                         return updated;
                     }
@@ -488,10 +588,11 @@
 
             const clearAll = () => {
                 if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+                    const newQuotationNo = getNextQuotationNo();
                     setQuotationData({
                         companyName: 'SIGN TECHNIC INDUSTRIES PVT LTD',
                         billTo: '',
-                        quotationNo: getNextQuotationNo(),
+                        quotationNo: newQuotationNo,
                         quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-'),
                         place: '',
                         validity: '30 days',
@@ -499,7 +600,7 @@
                         gstPercent: 18
                     });
                     setLineItems([
-                        { id: 1, image: null, productCode: '', description: '', specifications: '', qty: 0, unit: 'Sq Inch', rate: 0, amount: 0 }
+                        { id: 1, image: null, productCode: '', description: '', specifications: '', qty: 0, unit: 'Sq Inch', rate: 0, amount: 0, isPercentage: false, percentageOf: 'subtotal' }
                     ]);
                     setMaterials([
                         { id: 1, item: 'Driver', make: 'OSRAM Fighter Pro', warranty: '3 Years' },
@@ -624,13 +725,16 @@
                                 <div className="grid grid-cols-2 gap-2">
                                     <div>
                                         <label className="font-semibold text-sm">Quotation No:</label>
-                                        <input
-                                            type="text"
-                                            value={quotationData.quotationNo}
-                                            readOnly
-                                            className="w-full border-b border-gray-400 outline-none px-2 py-1 bg-gray-50"
-                                            title="Auto-generated"
-                                        />
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={quotationData.quotationNo}
+                                                readOnly
+                                                className="flex-1 border-b border-gray-400 outline-none px-2 py-1 bg-gray-50"
+                                                title="Auto-generated quotation number"
+                                            />
+                                            <span className="text-xs text-gray-500 self-end pb-1 print:hidden">Auto</span>
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="font-semibold text-sm">Date:</label>
@@ -693,6 +797,7 @@
                                         <th className="border border-gray-300 px-2 py-2 w-24">UNIT</th>
                                         <th className="border border-gray-300 px-2 py-2 w-24">RATE</th>
                                         <th className="border border-gray-300 px-2 py-2 w-32">AMOUNT</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-12 print:hidden">%</th>
                                         <th className="border border-gray-300 px-2 py-2 w-16 print:hidden">CALC</th>
                                         <th className="border border-gray-300 px-2 py-2 w-12 print:hidden">DEL</th>
                                     </tr>
@@ -767,16 +872,21 @@
                                                         onChange={(e) => updateLineItem(item.id, 'qty', e.target.value)}
                                                         className="w-full border-none outline-none text-center"
                                                         step="0.01"
+                                                        disabled={item.isPercentage}
                                                     />
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2">
-                                                    <select
-                                                        value={item.unit}
-                                                        onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                                                        className="w-full border-none outline-none"
-                                                    >
-                                                        {UNITS.map(u => <option key={u}>{u}</option>)}
-                                                    </select>
+                                                    {item.isPercentage ? (
+                                                        <span className="text-center block">%</span>
+                                                    ) : (
+                                                        <select
+                                                            value={item.unit}
+                                                            onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                                                            className="w-full border-none outline-none"
+                                                        >
+                                                            {UNITS.map(u => <option key={u}>{u}</option>)}
+                                                        </select>
+                                                    )}
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2">
                                                     <input
@@ -785,16 +895,27 @@
                                                         onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)}
                                                         className="w-full border-none outline-none text-right"
                                                         step="0.01"
+                                                        placeholder={item.isPercentage ? "%" : "Rate"}
                                                     />
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2 text-right font-semibold">
                                                     {item.amount.toFixed(2)}
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={item.isPercentage}
+                                                        onChange={(e) => updateLineItem(item.id, 'isPercentage', e.target.checked)}
+                                                        title="Enable percentage calculation (for Transport/Installation)"
+                                                        className="w-4 h-4"
+                                                    />
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
                                                     <button 
                                                         onClick={() => openCalculator(item.id)} 
                                                         className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
                                                         title="Calculate from MM"
+                                                        disabled={item.isPercentage}
                                                     >
                                                         <CalculatorIcon />
                                                     </button>
