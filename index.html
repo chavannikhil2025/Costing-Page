@@ -1352,6 +1352,14 @@
         }
 
         ReactDOM.render(<SignageCostingApp />, document.getElementById('root'));
-    </script>
+    
+
+// Initialize the app when DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Create and initialize the app
+    const app = new SignageCostingApp();
+    console.log('Signage Costing App initialized successfully');
+});
+</script>
 </body>
 </html>
