@@ -354,26 +354,36 @@
                 }
             };
 
+            // FIXED: Get current quotation number without incrementing
+            const getCurrentQuotationNo = () => {
+                return loadFromMemory('lastQuotationNo', 0);
+            };
+
+            // FIXED: Only increment when actually needed
             const getNextQuotationNo = () => {
                 const lastNo = loadFromMemory('lastQuotationNo', 0);
                 const nextNo = lastNo + 1;
                 saveToMemory('lastQuotationNo', nextNo);
-                return nextNo.toString();
+                return nextNo;
             };
 
             const [productDatabase, setProductDatabase] = useState(
                 loadFromMemory('productDatabase', DEFAULT_PRODUCT_DATABASE)
             );
 
-            const [quotationData, setQuotationData] = useState({
-                companyName: 'SIGN TECHNIC INDUSTRIES PVT LTD',
-                billTo: '',
-                quotationNo: getNextQuotationNo(),
-                quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-'),
-                place: '',
-                validity: '30 days',
-                paymentTerms: '50% Advance, 50% on Completion',
-                gstPercent: 18
+            // FIXED: Initialize with current number + 1, but only save when component mounts
+            const [quotationData, setQuotationData] = useState(() => {
+                const nextNo = getCurrentQuotationNo() + 1;
+                return {
+                    companyName: 'SIGN TECHNIC INDUSTRIES PVT LTD',
+                    billTo: '',
+                    quotationNo: nextNo.toString(),
+                    quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-'),
+                    place: '',
+                    validity: '30 days',
+                    paymentTerms: '50% Advance, 50% on Completion',
+                    gstPercent: 18
+                };
             });
 
             const [lineItems, setLineItems] = useState([
@@ -392,6 +402,11 @@
             const [calculatorTarget, setCalculatorTarget] = useState(null);
             const signatureRef = useRef(null);
 
+            // FIXED: Save the quotation number to localStorage only on mount
+            useEffect(() => {
+                saveToMemory('lastQuotationNo', parseInt(quotationData.quotationNo));
+            }, []); // Empty dependency array means this runs only once on mount
+
             useEffect(() => {
                 saveToMemory('productDatabase', productDatabase);
             }, [productDatabase]);
@@ -399,33 +414,33 @@
             useEffect(() => {
                 setLineItems(prevItems => {
                     return prevItems.map(item => {
-                        if (item.isPercentage) {
-                            const baseSubtotal = prevItems
-                                .filter(i => i.id !== item.id && !i.isPercentage)
-                                .reduce((sum, i) => sum + (i.amount || 0), 0);
-                            return {
-                                ...item,
-                                amount: (baseSubtotal * (parseFloat(item.rate) || 0)) / 100
-                            };
-                        }
-                        return item;
+                        const amount = item.isPercentage 
+                            ? (calculateSubtotalExcludingPercentage() * item.rate) / 100
+                            : item.qty * item.rate;
+                        return { ...item, amount };
                     });
                 });
-            }, [lineItems.length, lineItems.map(i => i.isPercentage ? 0 : i.amount).join(',')]);
+            }, [lineItems.map(i => `${i.qty}-${i.rate}-${i.isPercentage}`).join(',')]);
+
+            const calculateSubtotalExcludingPercentage = () => {
+                return lineItems
+                    .filter(item => !item.isPercentage)
+                    .reduce((sum, item) => sum + (item.amount || 0), 0);
+            };
 
             const addLineItem = () => {
                 const newId = Math.max(...lineItems.map(item => item.id), 0) + 1;
                 setLineItems([...lineItems, { 
                     id: newId, 
-                    image: null,
-                    productCode: '',
+                    image: null, 
+                    productCode: '', 
                     description: '', 
                     specifications: '', 
                     qty: 0, 
                     unit: 'Sq Inch', 
                     rate: 0, 
                     amount: 0,
-                    isPercentage: false
+                    isPercentage: false 
                 }]);
             };
 
@@ -436,38 +451,26 @@
             };
 
             const updateLineItem = (id, field, value) => {
-                setLineItems(prevItems => prevItems.map(item => {
+                setLineItems(lineItems.map(item => {
                     if (item.id === id) {
-                        const updated = { ...item, [field]: value };
+                        const updatedItem = { ...item, [field]: value };
                         
-                        if (field === 'productCode' && value) {
-                            const product = productDatabase[value];
-                            if (product) {
-                                updated.description = `${product.code} - ${product.name}`;
-                            }
-                        }
-                        
-                        if (field === 'isPercentage') {
-                            updated.isPercentage = value;
-                            if (value) {
-                                updated.unit = '%';
-                                updated.qty = 1;
+                        if (field === 'qty' || field === 'rate' || field === 'isPercentage') {
+                            const qty = parseFloat(field === 'qty' ? value : updatedItem.qty) || 0;
+                            const rate = parseFloat(field === 'rate' ? value : updatedItem.rate) || 0;
+                            const isPercentage = field === 'isPercentage' ? value : updatedItem.isPercentage;
+                            
+                            if (isPercentage) {
+                                const subtotal = lineItems
+                                    .filter(i => i.id !== id && !i.isPercentage)
+                                    .reduce((sum, i) => sum + (i.qty * i.rate), 0);
+                                updatedItem.amount = (subtotal * rate) / 100;
                             } else {
-                                updated.unit = 'Sq Inch';
+                                updatedItem.amount = qty * rate;
                             }
                         }
                         
-                        if (updated.isPercentage) {
-                            const baseSubtotal = prevItems
-                                .filter(i => i.id !== id && !i.isPercentage)
-                                .reduce((sum, i) => sum + (i.amount || 0), 0);
-                            updated.amount = (baseSubtotal * (parseFloat(updated.rate) || 0)) / 100;
-                        } else {
-                            if (field === 'qty' || field === 'rate') {
-                                updated.amount = (parseFloat(updated.qty) || 0) * (parseFloat(updated.rate) || 0);
-                            }
-                        }
-                        return updated;
+                        return updatedItem;
                     }
                     return item;
                 }));
@@ -484,7 +487,22 @@
                 }
             };
 
-            const handleSpecificationSelect = (id, spec) => {
+            const handleProductCodeChange = (id, code) => {
+                updateLineItem(id, 'productCode', code);
+                
+                const product = productDatabase[code];
+                if (product) {
+                    updateLineItem(id, 'description', product.name);
+                    
+                    let spec = '';
+                    if (product.specifications && product.specifications.length > 0) {
+                        spec = product.specifications[0];
+                    }
+                    updateLineItem(id, 'specifications', spec);
+                }
+            };
+
+            const handleSpecificationChange = (id, spec) => {
                 const item = lineItems.find(i => i.id === id);
                 if (item && item.productCode) {
                     const product = productDatabase[item.productCode];
@@ -556,21 +574,22 @@
                 const newQuotNo = getNextQuotationNo();
                 setQuotationData({ 
                     ...quotationData, 
-                    quotationNo: newQuotNo, 
+                    quotationNo: newQuotNo.toString(), 
                     quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-') 
                 });
             };
 
+            // FIXED: clearAll now properly increments the quotation number
             const clearAll = () => {
                 if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
-                    // Generate new quotation number FIRST
+                    // Get the next quotation number and save it
                     const newQuotNo = getNextQuotationNo();
                     
-                    // Then update all state
+                    // Reset all state with the new quotation number
                     setQuotationData({
                         companyName: 'SIGN TECHNIC INDUSTRIES PVT LTD',
                         billTo: '',
-                        quotationNo: newQuotNo,
+                        quotationNo: newQuotNo.toString(),
                         quotationDate: new Date().toLocaleDateString('en-GB').split('/').join('-'),
                         place: '',
                         validity: '30 days',
@@ -698,14 +717,13 @@
                                     <div>
                                         <label className="font-semibold text-sm">Quotation No:</label>
                                         <div className="flex gap-1 items-end">
+                                            <span className="text-sm">FGI/Q/</span>
                                             <input
                                                 type="text"
                                                 value={quotationData.quotationNo}
-                                                readOnly
-                                                className="flex-1 border-b border-gray-400 outline-none px-2 py-1 bg-gray-50"
-                                                title="Auto-generated"
+                                                onChange={(e) => setQuotationData({ ...quotationData, quotationNo: e.target.value })}
+                                                className="border-b border-gray-400 outline-none w-16 text-center"
                                             />
-                                            <span className="text-xs text-green-600 font-bold pb-1 print:hidden">Auto</span>
                                         </div>
                                     </div>
                                     <div>
@@ -714,43 +732,40 @@
                                             type="text"
                                             value={quotationData.quotationDate}
                                             onChange={(e) => setQuotationData({ ...quotationData, quotationDate: e.target.value })}
-                                            className="w-full border-b border-gray-400 outline-none px-2 py-1"
+                                            className="w-full border-b border-gray-400 outline-none text-sm"
                                         />
                                     </div>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-3 gap-2">
                                 <div>
-                                    <label className="font-semibold">Place:</label>
+                                    <label className="font-semibold text-sm">Place:</label>
                                     <input
                                         type="text"
                                         value={quotationData.place}
                                         onChange={(e) => setQuotationData({ ...quotationData, place: e.target.value })}
-                                        className="w-full border-b border-gray-400 outline-none px-2 py-1"
+                                        className="w-full border-b border-gray-400 outline-none text-sm"
                                     />
                                 </div>
                                 <div>
-                                    <label className="font-semibold">Validity:</label>
-                                    <select
+                                    <label className="font-semibold text-sm">Validity:</label>
+                                    <input
+                                        type="text"
                                         value={quotationData.validity}
                                         onChange={(e) => setQuotationData({ ...quotationData, validity: e.target.value })}
-                                        className="w-full border-b border-gray-400 outline-none px-2 py-1"
-                                    >
-                                        <option>15 days</option>
-                                        <option>30 days</option>
-                                        <option>45 days</option>
-                                        <option>60 days</option>
-                                        <option>90 days</option>
-                                    </select>
+                                        className="w-full border-b border-gray-400 outline-none text-sm"
+                                    />
                                 </div>
                                 <div>
-                                    <label className="font-semibold">Payment Terms:</label>
+                                    <label className="font-semibold text-sm">Payment Terms:</label>
                                     <select
                                         value={quotationData.paymentTerms}
                                         onChange={(e) => setQuotationData({ ...quotationData, paymentTerms: e.target.value })}
-                                        className="w-full border-b border-gray-400 outline-none px-2 py-1 text-sm"
+                                        className="w-full border-b border-gray-400 outline-none text-sm"
                                     >
-                                        {PAYMENT_TERMS.map(term => <option key={term}>{term}</option>)}
+                                        {PAYMENT_TERMS.map(term => (
+                                            <option key={term} value={term}>{term}</option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>
@@ -759,25 +774,24 @@
                         <div className="overflow-x-auto">
                             <table className="w-full border-collapse">
                                 <thead>
-                                    <tr className="bg-blue-900 text-white">
+                                    <tr className="bg-blue-800 text-white">
                                         <th className="border border-gray-300 px-2 py-2 w-12">SR.A</th>
                                         <th className="border border-gray-300 px-2 py-2 w-24">IMAGE</th>
-                                        <th className="border border-gray-300 px-2 py-2 w-48">DESCRIPTION</th>
-                                        <th className="border border-gray-300 px-2 py-2">Specifications</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-32">PRODUCT CODE</th>
+                                        <th className="border border-gray-300 px-2 py-2 min-w-48">DESCRIPTION</th>
+                                        <th className="border border-gray-300 px-2 py-2 min-w-64">Specifications</th>
                                         <th className="border border-gray-300 px-2 py-2 w-20">QTY</th>
                                         <th className="border border-gray-300 px-2 py-2 w-24">UNIT</th>
                                         <th className="border border-gray-300 px-2 py-2 w-24">RATE</th>
-                                        <th className="border border-gray-300 px-2 py-2 w-32">AMOUNT</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-28">AMOUNT</th>
                                         <th className="border border-gray-300 px-2 py-2 w-12 print:hidden">%</th>
-                                        <th className="border border-gray-300 px-2 py-2 w-16 print:hidden">CALC</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-12 print:hidden">CALC</th>
                                         <th className="border border-gray-300 px-2 py-2 w-12 print:hidden">DEL</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {lineItems.map((item, index) => {
-                                        const currentProduct = item.productCode ? productDatabase[item.productCode] : null;
-                                        const availableSpecs = currentProduct ? currentProduct.specifications : [];
-                                        
+                                        const product = productDatabase[item.productCode];
                                         return (
                                             <tr key={item.id}>
                                                 <td className="border border-gray-300 px-2 py-2 text-center">{index + 1}</td>
@@ -785,9 +799,8 @@
                                                     {item.image ? (
                                                         <img src={item.image} alt="Product" className="w-20 h-20 object-cover mx-auto" />
                                                     ) : (
-                                                        <label className="cursor-pointer flex flex-col items-center justify-center h-20 bg-gray-100 hover:bg-gray-200">
+                                                        <label className="cursor-pointer flex items-center justify-center h-20 border-2 border-dashed border-gray-300 hover:bg-gray-50">
                                                             <UploadIcon />
-                                                            <span className="text-xs text-gray-500">Upload</span>
                                                             <input
                                                                 type="file"
                                                                 accept="image/*"
@@ -800,41 +813,44 @@
                                                 <td className="border border-gray-300 px-2 py-2">
                                                     <select
                                                         value={item.productCode}
-                                                        onChange={(e) => updateLineItem(item.id, 'productCode', e.target.value)}
-                                                        className="w-full border-none outline-none bg-transparent mb-1 text-sm"
+                                                        onChange={(e) => handleProductCodeChange(item.id, e.target.value)}
+                                                        className="w-full border-none outline-none bg-transparent text-sm"
                                                     >
-                                                        <option value="">Select Product</option>
-                                                        {Object.values(productDatabase).map(p => (
-                                                            <option key={p.code} value={p.code}>{p.code} - {p.name}</option>
+                                                        <option value="">Select</option>
+                                                        {Object.keys(productDatabase).map(code => (
+                                                            <option key={code} value={code}>{code}</option>
                                                         ))}
                                                     </select>
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2">
                                                     <input
                                                         type="text"
                                                         value={item.description}
                                                         onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                                                        placeholder="Or type description"
-                                                        className="w-full border-none outline-none text-sm"
+                                                        className="w-full border-none outline-none"
                                                     />
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2">
-                                                    {availableSpecs.length > 0 && (
+                                                    {product && product.specifications.length > 0 ? (
                                                         <select
                                                             value={item.specifications}
-                                                            onChange={(e) => handleSpecificationSelect(item.id, e.target.value)}
-                                                            className="w-full border border-gray-300 rounded px-2 py-1 mb-2 text-xs"
+                                                            onChange={(e) => handleSpecificationChange(item.id, e.target.value)}
+                                                            className="w-full border-none outline-none bg-transparent text-sm"
                                                         >
-                                                            <option value="">Select from history...</option>
-                                                            {availableSpecs.map((spec, idx) => (
-                                                                <option key={idx} value={spec}>{spec.substring(0, 40)}...</option>
+                                                            <option value="">Select Specification</option>
+                                                            {product.specifications.map((spec, idx) => (
+                                                                <option key={idx} value={spec}>{spec}</option>
                                                             ))}
                                                         </select>
+                                                    ) : (
+                                                        <input
+                                                            type="text"
+                                                            value={item.specifications}
+                                                            onChange={(e) => handleSpecificationChange(item.id, e.target.value)}
+                                                            className="w-full border-none outline-none text-sm"
+                                                            placeholder="Enter specification"
+                                                        />
                                                     )}
-                                                    <textarea
-                                                        value={item.specifications}
-                                                        onChange={(e) => updateLineItem(item.id, 'specifications', e.target.value)}
-                                                        placeholder="Enter specifications..."
-                                                        className="w-full border-none outline-none resize-none h-16 text-sm"
-                                                    />
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2">
                                                     <input
@@ -842,34 +858,30 @@
                                                         value={item.qty}
                                                         onChange={(e) => updateLineItem(item.id, 'qty', e.target.value)}
                                                         className="w-full border-none outline-none text-center"
-                                                        step="0.01"
                                                         disabled={item.isPercentage}
                                                     />
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2">
-                                                    {item.isPercentage ? (
-                                                        <span className="text-center block font-bold">%</span>
-                                                    ) : (
-                                                        <select
-                                                            value={item.unit}
-                                                            onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
-                                                            className="w-full border-none outline-none text-sm"
-                                                        >
-                                                            {UNITS.map(u => <option key={u}>{u}</option>)}
-                                                        </select>
-                                                    )}
+                                                    <select
+                                                        value={item.unit}
+                                                        onChange={(e) => updateLineItem(item.id, 'unit', e.target.value)}
+                                                        className="w-full border-none outline-none"
+                                                        disabled={item.isPercentage}
+                                                    >
+                                                        {UNITS.map(u => (
+                                                            <option key={u} value={u}>{u}</option>
+                                                        ))}
+                                                    </select>
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2">
                                                     <input
                                                         type="number"
                                                         value={item.rate}
                                                         onChange={(e) => updateLineItem(item.id, 'rate', e.target.value)}
-                                                        className="w-full border-none outline-none text-right"
-                                                        step="0.01"
-                                                        placeholder={item.isPercentage ? "%" : ""}
+                                                        className="w-full border-none outline-none text-center"
                                                     />
                                                 </td>
-                                                <td className="border border-gray-300 px-2 py-2 text-right font-semibold">
+                                                <td className="border border-gray-300 px-2 py-2 text-right">
                                                     {item.amount.toFixed(2)}
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
@@ -877,8 +889,8 @@
                                                         type="checkbox"
                                                         checked={item.isPercentage}
                                                         onChange={(e) => updateLineItem(item.id, 'isPercentage', e.target.checked)}
-                                                        title="Enable % calculation"
-                                                        className="w-4 h-4 cursor-pointer"
+                                                        className="cursor-pointer"
+                                                        title="Calculate as percentage of subtotal"
                                                     />
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2 text-center print:hidden">
