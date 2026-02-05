@@ -626,19 +626,8 @@
                 saveToMemory('clientDatabase', clientDatabase);
             }, [clientDatabase]);
 
-            useEffect(() => {
-                setLineItems(prevItems => {
-                    return prevItems.map(item => {
-                        const amount = item.isPercentage 
-                            ? (calculateSubtotalExcludingPercentage() * item.rate) / 100
-                            : item.qty * item.rate;
-                        return { ...item, amount };
-                    });
-                });
-            }, [lineItems.map(i => `${i.qty}-${i.rate}-${i.isPercentage}`).join(',')]);
-
-            const calculateSubtotalExcludingPercentage = () => {
-                return lineItems
+            const calculateSubtotalExcludingPercentage = (items) => {
+                return items
                     .filter(item => !item.isPercentage)
                     .reduce((sum, item) => sum + (item.amount || 0), 0);
             };
@@ -675,29 +664,43 @@
             };
 
             const updateLineItem = (id, field, value) => {
-                setLineItems(lineItems.map(item => {
-                    if (item.id === id) {
-                        const updatedItem = { ...item, [field]: value };
-                        
-                        if (field === 'qty' || field === 'rate' || field === 'isPercentage') {
-                            const qty = parseFloat(field === 'qty' ? value : updatedItem.qty) || 0;
-                            const rate = parseFloat(field === 'rate' ? value : updatedItem.rate) || 0;
-                            const isPercentage = field === 'isPercentage' ? value : updatedItem.isPercentage;
+                setLineItems(prevItems => {
+                    // First pass: update the specific field
+                    const updatedItems = prevItems.map(item => {
+                        if (item.id === id) {
+                            const updatedItem = { ...item, [field]: value };
                             
-                            if (isPercentage) {
-                                const subtotal = lineItems
-                                    .filter(i => i.id !== id && !i.isPercentage)
-                                    .reduce((sum, i) => sum + (i.qty * i.rate), 0);
-                                updatedItem.amount = (subtotal * rate) / 100;
-                            } else {
+                            // Only calculate for the current item if it's not a percentage-based item
+                            if ((field === 'qty' || field === 'rate') && !updatedItem.isPercentage) {
+                                const qty = parseFloat(field === 'qty' ? value : updatedItem.qty) || 0;
+                                const rate = parseFloat(field === 'rate' ? value : updatedItem.rate) || 0;
                                 updatedItem.amount = qty * rate;
+                            } else if (field === 'isPercentage') {
+                                // When toggling percentage, recalculate
+                                const qty = parseFloat(updatedItem.qty) || 0;
+                                const rate = parseFloat(updatedItem.rate) || 0;
+                                if (!value) {
+                                    // Switching from percentage to normal
+                                    updatedItem.amount = qty * rate;
+                                }
                             }
+                            
+                            return updatedItem;
                         }
-                        
-                        return updatedItem;
-                    }
-                    return item;
-                }));
+                        return item;
+                    });
+                    
+                    // Second pass: recalculate percentage-based items
+                    const subtotalExcludingPercentage = calculateSubtotalExcludingPercentage(updatedItems);
+                    
+                    return updatedItems.map(item => {
+                        if (item.isPercentage) {
+                            const rate = parseFloat(item.rate) || 0;
+                            return { ...item, amount: (subtotalExcludingPercentage * rate) / 100 };
+                        }
+                        return item;
+                    });
+                });
             };
 
             const handleImageUpload = (id, e) => {
@@ -711,36 +714,42 @@
                 }
             };
 
-            const handleProductCodeChange = (id, code) => {
-                updateLineItem(id, 'productCode', code);
+            const handleProductCodeChange = (id, productName) => {
+                // Find the product by name
+                const productEntry = Object.entries(productDatabase).find(
+                    ([code, product]) => product.name === productName
+                );
                 
-                const product = productDatabase[code];
-                if (product) {
-                    updateLineItem(id, 'description', product.name);
+                if (productEntry) {
+                    const [code, product] = productEntry;
                     
-                    let spec = '';
-                    if (product.specifications && product.specifications.length > 0) {
-                        spec = product.specifications[0];
-                    }
-                    updateLineItem(id, 'specifications', spec);
+                    setLineItems(prevItems => prevItems.map(item => {
+                        if (item.id === id) {
+                            const updates = { 
+                                productCode: code,
+                                description: product.name
+                            };
+                            
+                            if (product.specifications && product.specifications.length > 0) {
+                                updates.specifications = product.specifications[0];
+                            }
+                            
+                            return { ...item, ...updates };
+                        }
+                        return item;
+                    }));
+                } else {
+                    // If no product found, just update the description (manual entry)
+                    setLineItems(prevItems => prevItems.map(item => {
+                        if (item.id === id) {
+                            return { ...item, description: productName };
+                        }
+                        return item;
+                    }));
                 }
             };
 
             const handleSpecificationChange = (id, spec) => {
-                const item = lineItems.find(i => i.id === id);
-                if (item && item.productCode) {
-                    const product = productDatabase[item.productCode];
-                    if (product && !product.specifications.includes(spec)) {
-                        const updatedProduct = {
-                            ...product,
-                            specifications: [...product.specifications, spec]
-                        };
-                        setProductDatabase({
-                            ...productDatabase,
-                            [item.productCode]: updatedProduct
-                        });
-                    }
-                }
                 updateLineItem(id, 'specifications', spec);
             };
 
@@ -789,8 +798,34 @@
 
             const applyCalculation = (result) => {
                 if (calculatorTarget) {
-                    updateLineItem(calculatorTarget, 'qty', result.area.toFixed(2));
-                    updateLineItem(calculatorTarget, 'unit', result.unit);
+                    setLineItems(prevItems => {
+                        const updatedItems = prevItems.map(item => {
+                            if (item.id === calculatorTarget) {
+                                const qty = parseFloat(result.area.toFixed(2)) || 0;
+                                const rate = parseFloat(item.rate) || 0;
+                                const amount = item.isPercentage ? item.amount : qty * rate;
+                                
+                                return {
+                                    ...item,
+                                    qty: result.area.toFixed(2),
+                                    unit: result.unit,
+                                    amount: amount
+                                };
+                            }
+                            return item;
+                        });
+                        
+                        // Recalculate percentage-based items
+                        const subtotalExcludingPercentage = calculateSubtotalExcludingPercentage(updatedItems);
+                        
+                        return updatedItems.map(item => {
+                            if (item.isPercentage) {
+                                const rate = parseFloat(item.rate) || 0;
+                                return { ...item, amount: (subtotalExcludingPercentage * rate) / 100 };
+                            }
+                            return item;
+                        });
+                    });
                 }
             };
 
@@ -804,7 +839,7 @@
             };
 
             const clearAll = () => {
-                if (confirm('Are you sure you want to clear all data? This cannot be undone.')) {
+                if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
                     const newQuotNo = getNextQuotationNo();
                     
                     setQuotationData({
@@ -830,6 +865,7 @@
                     ]);
                     
                     setSignature(null);
+                    setShowMaterialSpecs(true);
                 }
             };
 
@@ -871,12 +907,8 @@
             };
 
             const applyTemplate = (template) => {
-                setLineItems(template.lineItems);
-                setMaterials(template.materials);
-            };
-
-            const handleClientSelect = (clientName) => {
-                setQuotationData({ ...quotationData, billTo: clientName });
+                setLineItems(template.lineItems.map(item => ({...item})));
+                setMaterials(template.materials.map(m => ({...m})));
             };
 
             const exportToPDF = () => {
@@ -1086,8 +1118,8 @@
                                     <tr className="bg-blue-800 text-white">
                                         <th className="border border-gray-300 px-2 py-2 w-12">SR.A</th>
                                         <th className="border border-gray-300 px-2 py-2 w-24">IMAGE</th>
-                                        <th className="border border-gray-300 px-2 py-2 w-32">PRODUCT CODE</th>
                                         <th className="border border-gray-300 px-2 py-2 min-w-48">DESCRIPTION</th>
+                                        <th className="border border-gray-300 px-2 py-2 w-32 print:hidden">PRODUCT CODE</th>
                                         <th className="border border-gray-300 px-2 py-2 min-w-64">Specifications</th>
                                         <th className="border border-gray-300 px-2 py-2 w-20">QTY</th>
                                         <th className="border border-gray-300 px-2 py-2 w-24">UNIT</th>
@@ -1122,45 +1154,27 @@
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2">
                                                     <select
-                                                        value={item.productCode}
+                                                        value={item.description}
                                                         onChange={(e) => handleProductCodeChange(item.id, e.target.value)}
                                                         className="w-full border-none outline-none bg-transparent text-sm"
                                                     >
-                                                        <option value="">Select</option>
-                                                        {Object.keys(productDatabase).map(code => (
-                                                            <option key={code} value={code}>{code}</option>
+                                                        <option value="">Select Product</option>
+                                                        {Object.values(productDatabase).map(prod => (
+                                                            <option key={prod.code} value={prod.name}>{prod.name}</option>
                                                         ))}
                                                     </select>
+                                                </td>
+                                                <td className="border border-gray-300 px-2 py-2 text-center text-sm text-gray-600 print:hidden">
+                                                    {item.productCode || '-'}
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2">
                                                     <input
                                                         type="text"
-                                                        value={item.description}
-                                                        onChange={(e) => updateLineItem(item.id, 'description', e.target.value)}
-                                                        className="w-full border-none outline-none"
+                                                        value={item.specifications}
+                                                        onChange={(e) => handleSpecificationChange(item.id, e.target.value)}
+                                                        className="w-full border-none outline-none text-sm"
+                                                        placeholder="Enter specification"
                                                     />
-                                                </td>
-                                                <td className="border border-gray-300 px-2 py-2">
-                                                    {product && product.specifications.length > 0 ? (
-                                                        <select
-                                                            value={item.specifications}
-                                                            onChange={(e) => handleSpecificationChange(item.id, e.target.value)}
-                                                            className="w-full border-none outline-none bg-transparent text-sm"
-                                                        >
-                                                            <option value="">Select Specification</option>
-                                                            {product.specifications.map((spec, idx) => (
-                                                                <option key={idx} value={spec}>{spec}</option>
-                                                            ))}
-                                                        </select>
-                                                    ) : (
-                                                        <input
-                                                            type="text"
-                                                            value={item.specifications}
-                                                            onChange={(e) => handleSpecificationChange(item.id, e.target.value)}
-                                                            className="w-full border-none outline-none text-sm"
-                                                            placeholder="Enter specification"
-                                                        />
-                                                    )}
                                                 </td>
                                                 <td className="border border-gray-300 px-2 py-2">
                                                     <input
@@ -1352,13 +1366,6 @@
         }
 
         ReactDOM.render(<SignageCostingApp />, document.getElementById('root'));
-    
-
-// Initialize the app when page loads
-document.addEventListener('DOMContentLoaded', function() {
-    const app = new SignageCostingApp();
-    console.log('✓ App loaded successfully');
-});
-</script>
+    </script>
 </body>
 </html>
